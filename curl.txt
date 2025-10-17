@@ -1,0 +1,5 @@
+curl -X POST https://2c75e4e9029a.ngrok-free.app ^
+  -H "Content-Type: application/json" ^
+  -d "{\"message\":\"Hello there\"}"
+
+ngrok http --domain=enough-blatantly-whale.ngrok-free.app 8000

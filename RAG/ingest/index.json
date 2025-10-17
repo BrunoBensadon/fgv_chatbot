@@ -1,0 +1,119 @@
+{
+  "version": "2025-09-19.v1",
+  "source_priority": [
+    "legal/pl1087_text_extracted.md",
+    "rag_core/pl1087_rag_master.md",
+    "rag_core/pl1087_examples",
+    "full_assistant_responses_PL1087.md"
+  ],
+  "documents": {
+    "pl1087_pdf": {
+      "id": "pl1087_pdf",
+      "path": "legal/PL-1087-2025.pdf",
+      "type": "pdf",
+      "primary": true,
+      "tags": ["legal","source:pl"]
+    },
+    "pl1087_text": {
+      "id": "pl1087_text",
+      "path": "legal/pl1087_text_extracted.md",
+      "type": "md",
+      "tags": ["legal","text_extracted"]
+    },
+    "pl1087_master": {
+      "id": "pl1087_master",
+      "path": "rag_core/pl1087_rag_master.md",
+      "type": "md",
+      "tags": ["synth","calc","faq"]
+    },
+    "pl1087_examples": {
+      "id": "pl1087_examples",
+      "path": "rag_core/pl1087_examples/",
+      "type": "folder",
+      "tags": ["examples","tests"]
+    },
+    "assistant_full": {
+      "id": "assistant_full",
+      "path": "full_assistant_responses_PL1087.md",
+      "type": "md",
+      "tags": ["meta","notes"]
+    }
+  },
+  "routes": [
+    {
+      "intent": "profile",
+      "patterns": ["sou clt","sou autônomo","sou pj","meu perfil contribuinte"],
+      "doc_priority": ["pl1087_master","pl1087_text"],
+      "section_filters": {"tags":["profile","contribuinte"]},
+      "k": 4,
+      "rerank": {"method":"exact_then_semantic","threshold":0.80}
+    },
+    {
+      "intent": "exemption_amount",
+      "patterns": ["até quanto posso ganhar sem pagar","isento de imposto","faixa isenção"],
+      "doc_priority": ["pl1087_master","pl1087_text"],
+      "section_filters": {"tags":["isencao","rendas_isentas","faq"]},
+      "k": 5
+    },
+    {
+      "intent": "irpfm_calc",
+      "patterns": ["quando começo a pagar irpfm","calcule irpfm","alíquota máxima"],
+      "doc_priority": ["pl1087_master","pl1087_examples"],
+      "section_filters": {"tags":["irpfm","calc","pseudocode","example"]},
+      "k": 8,
+      "rerank": {"method":"exact_match_then_semantic","threshold":0.86}
+    },
+    {
+      "intent": "dividends",
+      "patterns": ["dividendos","retenção 10%","fracionar dividendos","dividendo 50k"],
+      "doc_priority": ["pl1087_master","pl1087_text","pl1087_examples"],
+      "section_filters": {"tags":["dividendos","retenção","redutor"]},
+      "k": 8
+    },
+    {
+      "intent": "redutor",
+      "patterns": ["o que é redutor","art 16-b redutor","como calcular redutor"],
+      "doc_priority": ["pl1087_text","pl1087_master"],
+      "section_filters": {"tags":["redutor","art16B"]},
+      "k": 5,
+      "rerank": {"method":"token_exact_priority","tokens":["redutor","Art.16-B","IRPJ","CSLL"]}
+    },
+    {
+      "intent": "international",
+      "patterns": ["rendimentos do exterior","contratos internacionais","imposto no exterior","compensar imposto"],
+      "doc_priority": ["pl1087_master","pl1087_text"],
+      "section_filters": {"tags":["internacional","conv_tax","compensacao"]},
+      "k": 6
+    },
+    {
+      "intent": "deductions",
+      "patterns": ["deduções médicas","previdência complementar","educação dedução"],
+      "doc_priority": ["pl1087_master","pl1087_text"],
+      "section_filters": {"tags":["deducoes","abatimentos"]},
+      "k": 4
+    },
+    {
+      "intent": "inequality",
+      "patterns": ["quem paga mais","desigualdade","impacto da reforma"],
+      "doc_priority": ["pl1087_master","pl1087_examples"],
+      "section_filters": {"tags":["impacto","desigualdade","faixas"]},
+      "k": 6
+    },
+    {
+      "intent": "fallback",
+      "patterns": ["*"],
+      "doc_priority": ["pl1087_master","pl1087_text","assistant_full"],
+      "section_filters": {"tags":["index_search","pontos_indexacao"]},
+      "k": 10
+    }
+  ],
+  "retrieval_defaults": {
+    "chunk_size": 400,
+    "chunk_overlap": 50,
+    "k_default": 5,
+    "embed_model": "text-embedding-embedding-v1",
+    "vector_index": "faiss",
+    "metadata_fields": ["doc_id","section_id","tags","article_ref","page","ingest_date","version"],
+    "score_threshold": 0.0
+  }
+}

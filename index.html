@@ -1,153 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BetaBot - Local Chat</title>
-
-<style>
-  body {
-    font-family: "Segoe UI", sans-serif;
-    background-color: #1f1f1f;
-    color: #eaeaea;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    margin: 0;
-  }
-
-  #chat-container {
-    width: 90%;
-    max-width: 600px;
-    background: #2a2a2a;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  #messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    margin-bottom: 10px;
-    max-height: 400px;
-  }
-
-  .message {
-    margin: 8px 0;
-    padding: 10px 14px;
-    border-radius: 16px;
-    width: fit-content;
-    max-width: 80%;
-    word-wrap: break-word;
-  }
-
-  .user {
-    background-color: #005eff;
-    color: white;
-    align-self: flex-end;
-  }
-
-  .bot {
-    background-color: #333;
-    align-self: flex-start;
-  }
-
-  #input-area {
-    display: flex;
-    margin-top: 10px;
-  }
-
-  #userInput {
-    flex: 1;
-    padding: 10px;
-    border-radius: 8px;
-    border: none;
-    background: #3a3a3a;
-    color: white;
-    font-size: 16px;
-  }
-
-  #sendButton {
-    background-color: #005eff;
-    border: none;
-    color: white;
-    padding: 10px 18px;
-    margin-left: 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 16px;
-    transition: background 0.2s;
-  }
-
-  #sendButton:hover {
-    background-color: #006fff;
-  }
-
-</style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Chat Tributo</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="chat-container">
-    <div id="messages"></div>
-    <div id="input-area">
-      <input id="userInput" type="text" placeholder="Type your message..." />
-      <button id="sendButton">Send</button>
-    </div>
+  <div class="page">
+    <h1 id="header">Chat Tributo</h1>
+
+    <main id="chat-container" role="application" aria-label="Chat Tributo">
+      <div id="messages" aria-live="polite"></div>
+
+      <div id="input-area">
+        <input id="userInput" type="text" placeholder="Type your message..." aria-label="Message input" />
+        <button id="sendButton" aria-label="Send message">Send</button>
+      </div>
+    </main>
   </div>
 
 <script>
-const ENDPOINT = "https://enough-blatantly-whale.ngrok-free.app/chat";
+  const ENDPOINT = "https://2c75e4e9029a.ngrok-free.app";
 
-const messagesDiv = document.getElementById('messages');
-const inputField = document.getElementById('userInput');
-const sendButton = document.getElementById('sendButton');
+  const messagesDiv = document.getElementById('messages');
+  const inputField = document.getElementById('userInput');
+  const sendButton = document.getElementById('sendButton');
 
-function addMessage(text, sender) {
-  const msgDiv = document.createElement('div');
-  msgDiv.classList.add('message', sender);
-  msgDiv.textContent = text;
-  messagesDiv.appendChild(msgDiv);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
-
-async function sendMessage() {
-  const message = inputField.value.trim();
-  if (!message) return;
-
-  addMessage(message, 'user');
-  inputField.value = '';
-
-  try {
-    const response = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: message })
-    });
-
-    if (!response.ok) {
-      addMessage(`Error: ${response.status}`, 'bot');
-      return;
-    }
-
-    const data = await response.json();
-    const reply = data.reply || JSON.stringify(data);
-    addMessage(reply, 'bot');
-
-  } catch (error) {
-    addMessage("Error sending message: " + error.message, 'bot');
+  function addMessage(text, who = 'bot') {
+    const d = document.createElement('div');
+    d.className = 'message ' + (who === 'user' ? 'user' : 'bot');
+    d.textContent = text;
+    messagesDiv.appendChild(d);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
   }
-}
 
-sendButton.addEventListener('click', sendMessage);
-inputField.addEventListener('keypress', e => {
-  if (e.key === 'Enter') sendMessage();
-});
+  async function sendMessage() {
+    const message = inputField.value.trim();
+    if (!message) return;
+    addMessage(message, 'user');
+    inputField.value = '';
+    try {
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message })
+      });
+      if (!res.ok) {
+        addMessage(`Error: ${res.status}`, 'bot');
+        return;
+      }
+      const json = await res.json().catch(() => null);
+      const reply = (json && (json.reply || json.message || json.text)) || (json ? JSON.stringify(json) : 'No JSON reply');
+      addMessage(reply, 'bot');
+    } catch (err) {
+      addMessage("Error sending message: " + err.message, 'bot');
+    }
+  }
+
+  sendButton.addEventListener('click', sendMessage);
+  inputField.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 </script>
 </body>
 </html>

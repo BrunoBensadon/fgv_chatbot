@@ -76,15 +76,15 @@ app.add_middleware(
 class Message(BaseModel):
     message: str
     language: str = "Portuguese"
-    session_id: str = "default"
+    session_id: str
 
 @app.post("/chat")
 async def chat(m: Message, request: Request):
     client_host = request.client.host
-    logging.info(f"Incoming request from {client_host} (session={m.session_id}) with message: {m.message}")
+    logging.info(f"Incoming request from {client_host} (session={client_host}) with message: {m.message}")
 
     input_messages = [HumanMessage(m.message)]
-    config = {"configurable": {"thread_id": m.session_id}}
+    config = {"configurable": {"thread_id": client_host}}
 
     output = memory_app.invoke({"messages": input_messages, "language": m.language}, config)
     reply = output["messages"][-1].content

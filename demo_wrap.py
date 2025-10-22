@@ -33,7 +33,7 @@ prompt_template = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are a financial assistant. Answer all questions to the best of your ability in portuguese.",
+            "You are a financial assistant. Answer all questions to the best of your ability in {language}.",
         ),
         MessagesPlaceholder(variable_name="messages"),
     ]
@@ -60,7 +60,7 @@ memory_app = workflow.compile(checkpointer=MemorySaver())
 # ---------------------- FastAPI ----------------------
 app = FastAPI()
 
-# Enable CORS if needed (e.g. for Typebot frontend)
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # adjust as needed
@@ -71,7 +71,7 @@ app.add_middleware(
 
 class Message(BaseModel):
     message: str
-    language: str = "English"
+    language: str = "Portuguese"
     session_id: str = "default"  # so multiple users can have different memory sessions
 
 @app.post("/chat")

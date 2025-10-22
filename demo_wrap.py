@@ -18,7 +18,11 @@ from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 
 # ---------------------- Logging ----------------------
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    filename="messages.log",
+    level=logging.INFO, 
+    format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
 # ---------------------- API Key ----------------------
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
@@ -72,7 +76,7 @@ app.add_middleware(
 class Message(BaseModel):
     message: str
     language: str = "Portuguese"
-    session_id: str = "default"  # so multiple users can have different memory sessions
+    session_id: str = "default"
 
 @app.post("/chat")
 async def chat(m: Message, request: Request):

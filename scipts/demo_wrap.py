@@ -16,6 +16,7 @@ from langchain_core.messages import HumanMessage, BaseMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
+from tools import search_tool
 
 # ---------------------- Logging ----------------------
 logging.basicConfig(
@@ -29,8 +30,11 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 if not os.environ.get("GOOGLE_API_KEY"):
     os.environ["GOOGLE_API_KEY"] = getpass.getpass("Enter API key for Google Gemini: ")
 
+# ---------------------- Tools ------------------------
+tools = [search_tool]
+
 # ---------------------- Model ------------------------
-model = init_chat_model("gemini-2.0-flash", model_provider="google_genai")
+model = init_chat_model("gemini-2.0-flash", model_provider="google_genai").bind_tools(tools)
 
 # ---------------------- Prompt -----------------------
 prompt_template = ChatPromptTemplate.from_messages(
@@ -76,22 +80,21 @@ app.add_middleware(
 class Message(BaseModel):
     message: str
     language: str = "Portuguese"
-    session_id: str
+    session_id: str = "default"  # so multiple users can have different memory sessions
 
 @app.post("/chat")
 async def chat(m: Message, request: Request):
     client_host = request.client.host
-    logging.info(f"Incoming request from {client_host} (session={client_host}) with message: {m.message}")
+    logging.info(f"Incoming request from {client_host} (session={m.session_id}) with message: {m.message}")
 
     input_messages = [HumanMessage(m.message)]
-    config = {"configurable": {"thread_id": client_host}}
+    config = {"configurable": {"thread_id": m.session_id}}
 
     output = memory_app.invoke({"messages": input_messages, "language": m.language}, config)
     reply = output["messages"][-1].content
 
     logging.info(f"Replying to {client_host} with: {reply}")
     return {"reply": reply}
-
 # ---------------------- Run --------------------------
 if __name__ == "__main__":
     host = "127.0.0.1"

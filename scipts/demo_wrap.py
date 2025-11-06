@@ -21,6 +21,8 @@ from langchain_community.tools import DuckDuckGoSearchRun
 from langchain.agents import initialize_agent, AgentType
 from langchain_core.messages import AIMessage
 
+from scipts.tools.rag_retriever import rag_search
+
 # ---------------------- Logging ----------------------
 logging.basicConfig(
     filename="messages.log",
@@ -34,19 +36,9 @@ if not os.environ.get("GOOGLE_API_KEY"):
     os.environ["GOOGLE_API_KEY"] = getpass.getpass("Enter API key for Google Gemini: ")
 
 # ---------------------- Tools ------------------------
-search_tool = DuckDuckGoSearchRun(max_results=5, return_direct=False)
-#retriever = vectordb.as_retriever(search_kwargs={"k": 2})
-#
-#@tool
-#def rag_search_tool(query: str) -> str:
-#    """Top-3 chunks from KB (empty string if none)"""
-#    try:
-#        docs = retriever.invoke(query, k=3)
-#        return "\n\n".join(d.page_content for d in docs) if docs else ""
-#    except Exception as e:
-#        return f"RAG_ERROR::{e}"
+web_search = DuckDuckGoSearchRun(max_results=5, return_direct=False)
 
-tools = [search_tool]
+tools = [web_search, rag_search]
 # ---------------------- Model ------------------------
 model = init_chat_model("gemini-2.0-flash", model_provider="google_genai")
 

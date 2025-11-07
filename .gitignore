@@ -1,3 +1,5 @@
 .env
 messages.log
 commands.txt
+rag/
+__pycache__/

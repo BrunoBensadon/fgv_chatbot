@@ -1,1 +1,0 @@
-Essa estrutura de documentos é uma demo que produzimos para que o modelo consiga acessar rapidamente casos específicos ou recorrentes da nova PL. Os documentos ainda serão compilados em uma versão final, mais completa e robusta.

@@ -3,110 +3,277 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Financial Assistant</title>
-<link rel="stylesheet" href="style.css">
+<title>Financial Advisor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="container">
-  <div class="header-section">
-    <h1>Chat Tributo</h1>
-    <p>Seu guia para o Novo Imposto de Renda</p>
-  </div>
-  
-  <div id="messages" class="chat-container"></div>
-  
-  <div class="footer-section">
-    <div class="input-row">
-      <input id="userInput" type="text" placeholder="How can I help with your finances today?" />
-      <button id="sendButton">Send</button>
+<div class="app-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">🏛️</div>
+      <div class="brand-name">Financial Advisor</div>
+      <div class="brand-tagline">Trusted guidance for your future</div>
     </div>
-  </div>
+    
+    <div class="session-info">
+      <div class="session-label">Session ID</div>
+      <div class="session-id-display" id="sessionDisplay"></div>
+    </div>
+    
+    <button class="new-chat-btn" id="newChatBtn">
+      Start New Conversation
+    </button>
+  </aside>
+  
+  <!-- Main Chat -->
+  <main class="chat-main">
+    <header class="chat-header">
+      <div class="header-title">Financial Consultation</div>
+      <div class="stream-toggle">
+        <span>Streaming</span>
+        <div class="toggle-switch active" id="streamToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
+    </header>
+    
+    <div class="messages-container" id="messagesContainer">
+      <div class="empty-state">
+        <div class="empty-icon">💰</div>
+        <div class="empty-title">Welcome to Your Financial Advisor</div>
+        <div class="empty-subtitle">
+          I'm here to help you navigate your financial journey. 
+          Ask me about budgeting, investments, savings strategies, or any financial concerns you have.
+        </div>
+      </div>
+    </div>
+    
+    <div class="input-section">
+      <div class="input-container">
+        <input 
+          type="text" 
+          id="userInput" 
+          placeholder="Ask about budgeting, investments, savings strategies..."
+          autocomplete="off"
+        />
+        <button id="sendButton">Send</button>
+      </div>
+    </div>
+  </main>
 </div>
 
 <script>
 const ENDPOINT = "https://enough-blatantly-whale.ngrok-free.app/chat";
-const messagesDiv = document.getElementById('messages');
-const inputField = document.getElementById('userInput');
+
+// Generate session ID
+function generateSessionId() {
+  return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+let sessionId = generateSessionId();
+let streamingEnabled = true;
+let isStreaming = false;
+
+// UI Elements
+const messagesContainer = document.getElementById('messagesContainer');
+const userInput = document.getElementById('userInput');
 const sendButton = document.getElementById('sendButton');
+const sessionDisplay = document.getElementById('sessionDisplay');
+const streamToggle = document.getElementById('streamToggle');
+const newChatBtn = document.getElementById('newChatBtn');
 
+// Initialize
+sessionDisplay.textContent = sessionId;
+
+// Toggle streaming
+streamToggle.addEventListener('click', () => {
+  streamingEnabled = !streamingEnabled;
+  streamToggle.classList.toggle('active');
+});
+
+// New chat
+newChatBtn.addEventListener('click', () => {
+  sessionId = generateSessionId();
+  sessionDisplay.textContent = sessionId;
+  messagesContainer.innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">💰</div>
+      <div class="empty-title">Welcome to Your Financial Advisor</div>
+      <div class="empty-subtitle">
+        I'm here to help you navigate your financial journey. 
+        Ask me about budgeting, investments, savings strategies, or any financial concerns you have.
+      </div>
+    </div>
+  `;
+});
+
+// Parse markdown
 function parseMarkdown(text) {
-  return marked.parse(text);
+  return marked.parse(text, { breaks: true });
 }
 
-function addMessage(text, who = 'bot') {
+// Clear empty state
+function clearEmptyState() {
+  const emptyState = messagesContainer.querySelector('.empty-state');
+  if (emptyState) {
+    emptyState.remove();
+  }
+}
+
+// Add message
+function addMessage(content, role, isComplete = true) {
+  clearEmptyState();
+  
+  const block = document.createElement('div');
+  block.className = `message-block ${role}`;
+  block.dataset.role = role;
+  
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar-circle';
+  avatar.textContent = role === 'user' ? '👤' : '🤖';
+  
   const wrapper = document.createElement('div');
-  wrapper.className = `message-wrapper ${who}`;
+  wrapper.className = 'msg-wrapper';
   
-  const icon = document.createElement('div');
-  icon.className = 'msg-icon';
-  icon.textContent = who === 'user' ? '👤' : '💰';
+  const label = document.createElement('div');
+  label.className = 'msg-sender-label';
+  label.textContent = role === 'user' ? 'You' : 'Financial Advisor';
   
-  const body = document.createElement('div');
-  body.className = 'msg-body';
+  const contentBox = document.createElement('div');
+  contentBox.className = 'msg-content-box';
   
-  const name = document.createElement('div');
-  name.className = 'msg-name';
-  name.textContent = who === 'user' ? 'Você' : 'Chat Tributo';
+  if (role === 'assistant' && !isComplete) {
+    contentBox.innerHTML = content;
+    const cursor = document.createElement('span');
+    cursor.className = 'streaming-cursor';
+    contentBox.appendChild(cursor);
+  } else {
+    contentBox.innerHTML = role === 'assistant' ? parseMarkdown(content) : content;
+  }
   
-  const textDiv = document.createElement('div');
-  textDiv.className = 'msg-text';
-  textDiv.innerHTML = who === 'bot' ? parseMarkdown(text) : text;
+  wrapper.appendChild(label);
+  wrapper.appendChild(contentBox);
+  block.appendChild(avatar);
+  block.appendChild(wrapper);
+  messagesContainer.appendChild(block);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
   
-  body.appendChild(name);
-  body.appendChild(textDiv);
-  wrapper.appendChild(icon);
-  wrapper.appendChild(body);
-  messagesDiv.appendChild(wrapper);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-  return textDiv;
+  return contentBox;
 }
 
-function sendMessage() {
-  const message = inputField.value.trim();
-  if (!message) return;
+// Update streaming message
+function updateStreamingMessage(contentBox, newContent, isComplete = false) {
+  const cursor = contentBox.querySelector('.streaming-cursor');
+  if (cursor) cursor.remove();
+  
+  contentBox.innerHTML = parseMarkdown(newContent);
+  
+  if (!isComplete) {
+    const newCursor = document.createElement('span');
+    newCursor.className = 'streaming-cursor';
+    contentBox.appendChild(newCursor);
+  }
+  
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
 
+// Send message with streaming
+async function sendMessage() {
+  const message = userInput.value.trim();
+  if (!message || isStreaming) return;
+  
   addMessage(message, 'user');
-  inputField.value = '';
-  const botDiv = addMessage('...', 'bot');
-
-  // Build query params (EventSource only allows GET)
-  const params = new URLSearchParams({
-    message,
-    stream: true,
-    language: "Portuguese",
-    session_id: "default"
-  });
-
-  // Close any previous EventSource before starting a new one
-  if (window.currentSource) window.currentSource.close();
-
-  const source = new EventSource(`${ENDPOINT}?${params.toString()}`);
-  window.currentSource = source;
-
-  let accumulated = '';
-
-  source.onmessage = (event) => {
-    if (event.data === '[DONE]') {
-      source.close();
-      return;
+  userInput.value = '';
+  sendButton.disabled = true;
+  
+  if (streamingEnabled) {
+    isStreaming = true;
+    let fullResponse = '';
+    const contentBox = addMessage('', 'assistant', false);
+    
+    try {
+      const response = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: message,
+          session_id: sessionId,
+          stream: true,
+          language: 'en'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              updateStreamingMessage(contentBox, fullResponse, true);
+              break;
+            }
+            fullResponse += data;
+            updateStreamingMessage(contentBox, fullResponse, false);
+          }
+        }
+      }
+    } catch (error) {
+      updateStreamingMessage(contentBox, `Error: ${error.message}`, true);
+    } finally {
+      isStreaming = false;
+      sendButton.disabled = false;
     }
-    accumulated += event.data;
-    botDiv.innerHTML = parseMarkdown(accumulated);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  };
-
-  source.onerror = (err) => {
-    console.error('SSE error:', err);
-    botDiv.innerHTML = parseMarkdown("⚠️ Connection lost or streaming error.");
-    source.close();
-  };
+  } else {
+    // Non-streaming
+    try {
+      const response = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: message,
+          session_id: sessionId,
+          stream: false,
+          language: 'en'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const reply = data.reply || data.message || 'No response';
+      addMessage(reply, 'assistant');
+    } catch (error) {
+      addMessage(`Error: ${error.message}`, 'assistant');
+    } finally {
+      sendButton.disabled = false;
+    }
+  }
 }
 
+// Event listeners
 sendButton.addEventListener('click', sendMessage);
-inputField.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+userInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
 </script>
-
 </body>
 </html>

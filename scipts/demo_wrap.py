@@ -5,21 +5,20 @@ import logging
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from typing import Sequence
 from typing_extensions import Annotated, TypedDict
 
 from langchain.chat_models import init_chat_model
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.messages import HumanMessage, BaseMessage, AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
-from langchain.agents import create_agent, AgentType
-from langchain_core.messages import AIMessage
+from langchain.agents import create_react_agent
 
 from tools.rag_retriever import rag_search
 
@@ -39,56 +38,34 @@ if not os.environ.get("GOOGLE_API_KEY"):
 web_search = DuckDuckGoSearchRun(max_results=5, return_direct=False)
 
 tools = [rag_search]
+
 # ---------------------- Model ------------------------
 model = init_chat_model("gemini-2.0-flash", model_provider="google_genai")
-
-# ---------------------- Prompt -----------------------
-prompt_template = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "Você é o ChatTributo, um assistente para compreender as mudanças do Projeto de Lei 1.087/2025 sobre o Imposto de Renda que utiliza uma base de conhecimento personalizada. Responda todas as perguntas em {language}. "
-        ),
-        MessagesPlaceholder(variable_name="messages"),
-    ]
-)
 
 # ---------------------- State ------------------------
 class State(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     language: str   
 
-# ---------------------- Node -------------------------
+# ---------------------- Agent ------------------------
+# Create the system prompt as a string
+def get_system_prompt(language: str) -> str:
+    return f"Você é o ChatTributo, um assistente para compreender as mudanças do Projeto de Lei 1.087/2025 sobre o Imposto de Renda que utiliza uma base de conhecimento personalizada. Responda todas as perguntas em {language}."
 
-agent = create_agent(
-    tools,
-    model,
-    system_prompt=prompt_template
-)
+# Create agent with react pattern
+def create_agent_graph():
+    # Use create_react_agent from langgraph.prebuilt
+    # This handles the agent loop properly
+    agent_executor = create_react_agent(
+        model,
+        tools,
+        state_modifier="Você é o ChatTributo, um assistente para compreender as mudanças do Projeto de Lei 1.087/2025 sobre o Imposto de Renda que utiliza uma base de conhecimento personalizada."
+    )
+    return agent_executor
 
-def call_model(state: State):
-    prompt = prompt_template.invoke(state)
-    # run the agent — the agent will execute tools when needed and return a final string
-    try:
-        result_text = agent.run(prompt)
-    except Exception as e:
-        result_text = f"(tool/agent execution error) {e}"
-
-    # return as an assistant message so StateGraph/memory sees it
-    assistant_msg = AIMessage(result_text)
-    return {"messages": [assistant_msg]}
-
-
-
-    #response = model.invoke(prompt)
-    #return {"messages": [response]}
-
-# ---------------------- Workflow ---------------------
-workflow = StateGraph(state_schema=State)
-workflow.add_node("model", call_model)
-workflow.add_edge(START, "model")
-
-memory_app = workflow.compile(checkpointer=MemorySaver())
+# Compile with memory
+memory_app = create_agent_graph()
+memory_app = memory_app.compile(checkpointer=MemorySaver())
 
 # ---------------------- FastAPI ----------------------
 app = FastAPI()

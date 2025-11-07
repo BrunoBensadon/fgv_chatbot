@@ -1,9 +1,9 @@
 import os
 from typing import List, Optional
 from pathlib import Path
-from langchain.vectorstores import FAISS
-from langchain.embeddings import SentenceTransformerEmbeddings
-from langchain.schema import Document
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings  import SentenceTransformerEmbeddings
+from langchain_core.documents import Document
 from langchain.tools import tool
 
 class RAGRetriever:

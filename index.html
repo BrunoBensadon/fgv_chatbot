@@ -59,34 +59,54 @@ function addMessage(text, who = 'bot') {
   wrapper.appendChild(body);
   messagesDiv.appendChild(wrapper);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+  return textDiv;
 }
 
-async function sendMessage() {
+function sendMessage() {
   const message = inputField.value.trim();
   if (!message) return;
+
   addMessage(message, 'user');
   inputField.value = '';
-  
-  try {
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message })
-    });
-    if (!res.ok) {
-      addMessage(`Error: ${res.status}`, 'bot');
+  const botDiv = addMessage('...', 'bot');
+
+  // Build query params (EventSource only allows GET)
+  const params = new URLSearchParams({
+    message,
+    stream: true,
+    language: "Portuguese",
+    session_id: "default"
+  });
+
+  // Close any previous EventSource before starting a new one
+  if (window.currentSource) window.currentSource.close();
+
+  const source = new EventSource(`${ENDPOINT}?${params.toString()}`);
+  window.currentSource = source;
+
+  let accumulated = '';
+
+  source.onmessage = (event) => {
+    if (event.data === '[DONE]') {
+      source.close();
       return;
     }
-    const json = await res.json().catch(() => null);
-    const reply = (json && (json.reply || json.message || json.text)) || (json ? JSON.stringify(json) : 'No reply');
-    addMessage(reply, 'bot');
-  } catch (err) {
-    addMessage("Error sending message: " + err.message, 'bot');
-  }
+    accumulated += event.data;
+    botDiv.innerHTML = parseMarkdown(accumulated);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  };
+
+  source.onerror = (err) => {
+    console.error('SSE error:', err);
+    botDiv.innerHTML = parseMarkdown("⚠️ Connection lost or streaming error.");
+    source.close();
+  };
 }
 
 sendButton.addEventListener('click', sendMessage);
-inputField.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+inputField.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
 </script>
+
 </body>
 </html>

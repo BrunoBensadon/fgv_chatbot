@@ -1,9 +1,10 @@
 import os
 import getpass
 import logging
+import asyncio
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -84,24 +85,125 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def disable_buffering(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Accel-Buffering"] = "no"   # disable buffering for nginx proxies
+    return response
+
 class Message(BaseModel):
     message: str
     language: str = "Portuguese"
-    session_id: str = "default"  # so multiple users can have different memory sessions
+    session_id: str = "default"
+    stream: bool = False
 
 @app.post("/chat")
 async def chat(m: Message, request: Request):
     client_host = request.client.host
     logging.info(f"Incoming request from {client_host} (session={m.session_id}) with message: {m.message}")
 
+    # Prepare input with language-aware system message
+    system_prompt = get_system_prompt(m.language)
     input_messages = [HumanMessage(m.message)]
     config = {"configurable": {"thread_id": m.session_id}}
 
-    output = memory_app.invoke({"messages": input_messages, "language": m.language}, config)
-    reply = output["messages"][-1].content
+    if m.stream:
+        # Streaming response
+        async def generate():
+            try:
+                full_response = ""
+                async for event in memory_app.astream(
+                    {"messages": input_messages},
+                    config=config,
+                    stream_mode="values"
+                ):
+                    # Get the last message from the event
+                    if "messages" in event and len(event["messages"]) > 0:
+                        last_msg = event["messages"][-1]
+                        if isinstance(last_msg, AIMessage):
+                            content = last_msg.content
+                            if content and content != full_response:
+                                # Send only the new chunk
+                                chunk = content[len(full_response):]
+                                full_response = content
+                                yield f"data: {chunk}\n\n"
+                
+                logging.info(f"Streamed response to {client_host}: {full_response}")
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                error_msg = f"Error during streaming: {str(e)}"
+                logging.error(error_msg)
+                yield f"data: {error_msg}\n\n"
+                yield "data: [DONE]\n\n"
 
-    logging.info(f"Replying to {client_host} with: {reply}")
-    return {"reply": reply}
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    else:
+        # Regular response
+        try:
+            output = memory_app.invoke(
+                {"messages": input_messages},
+                config=config
+            )
+            reply = output["messages"][-1].content
+            logging.info(f"Replying to {client_host} with: {reply}")
+            return {"reply": reply}
+        except Exception as e:
+            error_msg = f"Error: {str(e)}"
+            logging.error(error_msg)
+            return {"reply": error_msg}
+
+@app.get("/chat")
+async def chat_stream(
+    message: str = Query(...),
+    language: str = "Portuguese",
+    session_id: str = "default",
+    request: Request = None,
+):
+    client_host = request.client.host if request.client else "unknown"
+    logging.info(f"SSE stream opened from {client_host} - message: {message}")
+
+    async def generate():
+        full_response = ""
+        try:
+            async for event in memory_app.astream(
+                {"messages": [HumanMessage(message)]},
+                config={"configurable": {"thread_id": session_id}},
+                stream_mode="values",
+            ):
+                if not event:
+                    continue
+                messages = event.get("messages", [])
+                if not messages:
+                    continue
+
+                last_msg = messages[-1]
+                if isinstance(last_msg, AIMessage):
+                    content = last_msg.content or ""
+                    if content != full_response:
+                        chunk = content[len(full_response):]
+                        full_response = content
+                        yield f"data: {chunk}\n\n"
+                        await asyncio.sleep(0)  # let event loop breathe
+
+            yield "data: [DONE]\n\n"
+            logging.info(f"SSE stream closed for {client_host}")
+        except Exception as e:
+            logging.error(f"SSE error: {e}")
+            yield f"data: Error: {str(e)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    # Important: set headers explicitly for SSE
+    headers = {
+        "Cache-Control": "no-cache",
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(generate(), headers=headers, media_type="text/event-stream")
+
+@app.options("/chat")
+async def options_chat():
+    return {"status": "ok"}
 
 # ---------------------- Run --------------------------
 if __name__ == "__main__":

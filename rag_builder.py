@@ -70,5 +70,5 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python build_vectorstore.py path/to/document.pdf")
 
-    doc_path = "C:/Users/bruno/Documents/Bensadon/FGV/Projetos III/fgv_chatbot/docs/sample.pdf"""
+    doc_path = "C:/Users/bruno/Documents/Bensadon/FGV/Projetos III/fgv_chatbot/docs/PL-1087-2025.pdf"""
     main(doc_path)

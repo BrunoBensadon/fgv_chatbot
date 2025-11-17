@@ -41,7 +41,7 @@ web_search = DuckDuckGoSearchRun(max_results=5, return_direct=False)
 tools = [rag_search]
 
 # ---------------------- Model ------------------------
-model = init_chat_model("gemini-2.0-flash", model_provider="google_genai")
+model = init_chat_model("gemini-2.5-pro", model_provider="google_genai")
 
 # ---------------------- State ------------------------
 class State(TypedDict):
@@ -57,7 +57,7 @@ def get_system_prompt(language: str) -> str:
 #def create_agent_graph():
     # Use create_react_agent from langgraph.prebuilt
     # This handles the agent loop properly
-memory_app = create_agent(
+agent = create_agent(
     model,
     tools,
     state_schema=State,
@@ -102,7 +102,6 @@ async def chat(m: Message, request: Request):
     client_host = request.client.host
     logging.info(f"Incoming request from {client_host} (session={m.session_id}) with message: {m.message}")
 
-    # Prepare input with language-aware system message
     system_prompt = get_system_prompt(m.language)
     input_messages = [HumanMessage(m.message)]
     config = {"configurable": {"thread_id": m.session_id}}
@@ -112,12 +111,11 @@ async def chat(m: Message, request: Request):
         async def generate():
             try:
                 full_response = ""
-                async for event in memory_app.astream(
+                async for event in agent.astream(
                     {"messages": input_messages},
                     config=config,
                     stream_mode="values"
                 ):
-                    # Get the last message from the event
                     if "messages" in event and len(event["messages"]) > 0:
                         last_msg = event["messages"][-1]
                         if isinstance(last_msg, AIMessage):
@@ -138,9 +136,8 @@ async def chat(m: Message, request: Request):
 
         return StreamingResponse(generate(), media_type="text/event-stream")
     else:
-        # Regular response
         try:
-            output = memory_app.invoke(
+            output = agent.invoke(
                 {"messages": input_messages},
                 config=config
             )
@@ -165,7 +162,7 @@ async def chat_stream(
     async def generate():
         full_response = ""
         try:
-            async for event in memory_app.astream(
+            async for event in agent.astream(
                 {"messages": [HumanMessage(message)]},
                 config={"configurable": {"thread_id": session_id}},
                 stream_mode="values",
@@ -192,7 +189,6 @@ async def chat_stream(
             yield f"data: Error: {str(e)}\n\n"
             yield "data: [DONE]\n\n"
 
-    # Important: set headers explicitly for SSE
     headers = {
         "Cache-Control": "no-cache",
         "Content-Type": "text/event-stream",
@@ -210,7 +206,7 @@ if __name__ == "__main__":
     host = "127.0.0.1"
     port = 8000
     try:
-        uvicorn.run("demo_wrap:app", host=host, port=port, reload=True, log_level="debug")
+        uvicorn.run("main:app", host=host, port=port, reload=True, log_level="debug")
     except OSError as e:
         logging.warning(f"Port {port} unavailable ({e}), falling back to 8080...")
-        uvicorn.run("demo_wrap:app", host=host, port=8080, reload=True, log_level="debug")
+        uvicorn.run("main:app", host=host, port=8080, reload=True, log_level="debug")

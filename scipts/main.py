@@ -9,9 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-import time
-import threading
-from typing import Any, Sequence
+from typing import Sequence
 from typing_extensions import Annotated, TypedDict
 
 from langchain.chat_models import init_chat_model
@@ -45,113 +43,10 @@ tools = [rag_search]
 # ---------------------- Model ------------------------
 model = init_chat_model("gemini-2.0-flash", model_provider="google_genai")
 
-# --------- contador simples de requests por minuto ----------
-class RequestsPerMinute:
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._current_minute = int(time.time() // 60)
-        self._count = 0
-
-    def inc_and_get(self) -> int:
-        with self._lock:
-            now_minute = int(time.time() // 60)
-            if now_minute != self._current_minute:
-                self._current_minute = now_minute
-                self._count = 0
-            self._count += 1
-            return self._count
-
-    def get_count(self) -> int:
-        with self._lock:
-            now_minute = int(time.time() // 60)
-            if now_minute != self._current_minute:
-                return 0
-            return self._count
-
-# --------- wrapper de modelo dinâmico ----------
-class DynamicChatModel:
-    def __init__(
-        self,
-        strong_model_name: str,
-        avg_model_name: str,
-        model_provider: str = "google_genai",
-        first_response_force_avg: bool = True,
-        strong_model_kwargs: dict | None = None,
-        avg_model_kwargs: dict | None = None,
-    ):
-        self._rpm = RequestsPerMinute()
-        self._lock = threading.Lock()
-        self._first_response = True if first_response_force_avg else False
-
-        self._strong_name = strong_model_name
-        self._avg_name = avg_model_name
-        self._provider = model_provider
-
-        self._strong_kwargs = strong_model_kwargs or {}
-        self._avg_kwargs = avg_model_kwargs or {}
-
-        # instanciar lazy (evita custo se não usado)
-        self._strong_model = None
-        self._avg_model = None
-
-    def _get_strong(self):
-        if self._strong_model is None:
-            # use sua função de inicialização real (ex.: init_chat_model)
-            self._strong_model = init_chat_model(self._strong_name, model_provider=self._provider, **self._strong_kwargs)
-        return self._strong_model
-
-    def _get_avg(self):
-        if self._avg_model is None:
-            self._avg_model = init_chat_model(self._avg_name, model_provider=self._provider, **self._avg_kwargs)
-        return self._avg_model
-
-    # Adapte o nome do método abaixo para o que seu agent usa: chat(), generate(), send(), etc.
-    def chat(self, messages: Sequence[Any], **kwargs):
-        """
-        Chamada principal que o agent fará. Decide o modelo e encaminha a chamada.
-        """
-        # incrementa e obtém contagem atual do minuto
-        count_this_minute = self._rpm.inc_and_get()
-
-        # se for a primeira resposta, obrigatoriamente AVG
-        with self._lock:
-            if self._first_response:
-                self._first_response = False
-                chosen = "avg"
-            else:
-                # lógica solicitada: if number_requestsThisMinute < 2 -> strong, else avg
-                # note: aqui count_this_minute inclui a requisição atual
-                if count_this_minute < 2:
-                    chosen = "strong"
-                else:
-                    chosen = "avg"
-
-        if chosen == "strong":
-            model = self._get_strong()
-        else:
-            model = self._get_avg()
-
-        # encaminha a chamada para o método real do modelo
-        # (troque 'chat' para o método que seu model realmente expõe)
-        return model.chat(messages, **kwargs)
-
-    # opcional: exponha também métodos úteis (streaming, close, etc.) conforme necessário
-    def supports_stream(self) -> bool:
-        # exemplo de proxy
-        m = self._get_avg()
-        return getattr(m, "supports_stream", lambda: False)()
-
 # ---------------------- State ------------------------
 class State(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     language: str   
-
-dynamic_model = DynamicChatModel(
-    strong_model_name=os.getenv("STRONG_MODEL"),
-    avg_model_name=os.getenv("AVG_MODEL"),
-    model_provider="google_genai",
-    first_response_force_avg=True,   # garante que a primeira resposta use avg
-)
 
 # ---------------------- Agent ------------------------
 # Create the system prompt as a string
@@ -163,7 +58,7 @@ def get_system_prompt(language: str) -> str:
     # Use create_react_agent from langgraph.prebuilt
     # This handles the agent loop properly
 agent = create_agent(
-    dynamic_model,
+    model,
     tools,
     state_schema=State,
     system_prompt=get_system_prompt("{language}"),

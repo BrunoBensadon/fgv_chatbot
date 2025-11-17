@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Financial Advisor</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chat Tributo</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image" href="icon.png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -31,12 +32,7 @@
   <main class="chat-main">
     <header class="chat-header">
       <div class="header-title">Assistente Tributário</div>
-      <div class="stream-toggle">
-        <span>[debug] Streaming</span>
-        <div class="toggle-switch active" id="streamToggle">
-          <div class="toggle-slider"></div>
-        </div>
-      </div>
+
     </header>
     
     <div class="messages-container" id="messagesContainer">
@@ -73,7 +69,7 @@ function generateSessionId() {
 }
 
 let sessionId = generateSessionId();
-let streamingEnabled = true;
+let streamingEnabled = false;
 let isStreaming = false;
 
 // UI Elements
@@ -88,10 +84,6 @@ const newChatBtn = document.getElementById('newChatBtn');
 sessionDisplay.textContent = sessionId;
 
 // Toggle streaming
-streamToggle.addEventListener('click', () => {
-  streamingEnabled = !streamingEnabled;
-  streamToggle.classList.toggle('active');
-});
 
 // New chat
 newChatBtn.addEventListener('click', () => {
@@ -139,7 +131,7 @@ function addMessage(content, role, isComplete = true) {
   
   const label = document.createElement('div');
   label.className = 'msg-sender-label';
-  label.textContent = role === 'user' ? 'You' : 'Financial Advisor';
+  label.textContent = role === 'user' ? 'Você' : 'Chat Tributo';
   
   const contentBox = document.createElement('div');
   contentBox.className = 'msg-content-box';
@@ -167,15 +159,21 @@ function addMessage(content, role, isComplete = true) {
 function updateStreamingMessage(contentBox, newContent, isComplete = false) {
   const cursor = contentBox.querySelector('.streaming-cursor');
   if (cursor) cursor.remove();
-  
-  contentBox.innerHTML = parseMarkdown(newContent);
-  
+
+  if (!isComplete) {
+    // DURING STREAMING → show plain text, preserve paragraphs
+    contentBox.textContent = newContent;
+  } else {
+    // AFTER STREAM FINISHES → apply markdown safely
+    contentBox.innerHTML = parseMarkdown(newContent);
+  }
+
   if (!isComplete) {
     const newCursor = document.createElement('span');
     newCursor.className = 'streaming-cursor';
     contentBox.appendChild(newCursor);
   }
-  
+
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
@@ -211,26 +209,66 @@ async function sendMessage() {
       
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let streamEnded = false;
       
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) {
+          // process any remaining buffer as final events
+          if (sseBuffer.length > 0) {
+            processSSEChunk(sseBuffer, true);
+            sseBuffer = '';
+          }
+          break;
+        }
         
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        const chunk = decoder.decode(value, { stream: true });
+        sseBuffer += chunk;
         
+        // Process complete SSE events separated by blank line (supports \r\n\r\n too)
+        const events = sseBuffer.split(/\r\n\r\n|\n\n/);
+        // leave last (possibly incomplete) part in buffer
+        sseBuffer = events.pop();
+        
+        for (const ev of events) {
+          if (streamEnded) break;
+          processSSEChunk(ev, false);
+        }
+        if (streamEnded) break;
+      }
+      
+      // helper: process one raw SSE event chunk (may contain multiple data: lines)
+      function processSSEChunk(raw, isFinal) {
+        // split into lines, accept \r\n or \n
+        const lines = raw.split(/\r?\n/);
+        const dataLines = [];
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              updateStreamingMessage(contentBox, fullResponse, true);
-              break;
-            }
-            fullResponse += data;
-            updateStreamingMessage(contentBox, fullResponse, false);
+          // accept lines like "data: ..." or "data:..." (trim optional space)
+          const m = line.match(/^data:\s?(.*)$/);
+          if (m) {
+            dataLines.push(m[1]);
           }
         }
+        if (dataLines.length === 0) {
+          return;
+        }
+        const data = dataLines.join('\n');
+        if (data === '[DONE]') {
+          // finalize
+          updateStreamingMessage(contentBox, fullResponse, true);
+          streamEnded = true;
+          return;
+        }
+        // Append the data exactly as received (preserves paragraph separators sent by server)
+        fullResponse += data;
+        updateStreamingMessage(contentBox, fullResponse, false);
+        
+        if (isFinal) {
+          updateStreamingMessage(contentBox, fullResponse, true);
+        }
       }
+      
     } catch (error) {
       updateStreamingMessage(contentBox, `Error: ${error.message}`, true);
     } finally {
@@ -239,6 +277,12 @@ async function sendMessage() {
     }
   } else {
     // Non-streaming
+    
+    // Create loading animation bubble (same style as streaming)
+    const loadingContentBox = addMessage('', 'assistant', false); // <-- this IS the content box
+    const loadingCursor = loadingContentBox.querySelector('.streaming-cursor');
+    loadingCursor.style.display = 'inline-block';
+    
     try {
       const response = await fetch(ENDPOINT, {
         method: 'POST',
@@ -250,16 +294,19 @@ async function sendMessage() {
           language: 'en'
         })
       });
-      
+    
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      
+    
       const data = await response.json();
       const reply = data.reply || data.message || 'No response';
-      addMessage(reply, 'assistant');
+    
+      // ✅ Replace content of the SAME bubble
+      loadingContentBox.innerHTML = parseMarkdown(reply);
+    
     } catch (error) {
-      addMessage(`Error: ${error.message}`, 'assistant');
+      loadingContentBox.innerHTML = `Error: ${error.message}`;
     } finally {
       sendButton.disabled = false;
     }

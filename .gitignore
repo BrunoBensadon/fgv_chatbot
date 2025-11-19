@@ -1,5 +1,6 @@
 .env
 messages.log
 commands.txt
-rag/
+rag/ingest/*
+rag/vectorstore/*
 __pycache__/

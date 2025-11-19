@@ -26,5 +26,5 @@ def filter_log_file(log_file_path):
         print(f"An error occurred: {e}")
 
 # Specify the path to your log file here
-log_file_name = 'messages.log' 
+log_file_name = './messages.log' 
 filter_log_file(log_file_name)

@@ -2,7 +2,6 @@ import os
 import getpass
 import logging
 import asyncio
-import subprocess
 
 import uvicorn
 from fastapi import FastAPI, Request, Query

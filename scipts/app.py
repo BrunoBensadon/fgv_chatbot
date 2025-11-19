@@ -2,6 +2,7 @@ import os
 import getpass
 import logging
 import asyncio
+import subprocess
 
 import uvicorn
 from fastapi import FastAPI, Request, Query
@@ -30,6 +31,7 @@ logging.basicConfig(
     level=logging.INFO, 
     format="%(asctime)s - %(levelname)s - %(message)s"
     )
+ngrok_cmd = ["ngrok", "http", "--domain=enough-blatantly-whale.ngrok-free.app", "8000"]
 
 # ---------------------- API Key ----------------------
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
@@ -209,20 +211,22 @@ def run_uvicorn():
     port = 8000
     try:
         uvicorn.run(
-            "main:app",
+            "app:app",
             host=host,
             port=port,
             reload=True,
             log_level="debug",
             reload_excludes=["messages.log"]
         )
+        return True
     except OSError as e:
         logging.warning(f"Port {port} unavailable ({e}), falling back to 8080...")
         uvicorn.run(
-            "main:app",
+            "app:app",
             host=host,
             port=8080,
             reload=True,
             log_level="debug",
             reload_excludes=["messages.log"]
         )
+        return True
